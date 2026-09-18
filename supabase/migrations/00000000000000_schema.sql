@@ -11,6 +11,14 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- gen_random_uuid(), crypt()
 CREATE EXTENSION IF NOT EXISTS "unaccent";   -- pesquisa sem acentos
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";    -- pesquisa aproximada
 
+-- unaccent() é apenas STABLE; índices exigem IMMUTABLE, daí este wrapper.
+-- search_path inclui "extensions" porque é lá que o Supabase instala as extensões.
+CREATE OR REPLACE FUNCTION public.imutavel_sem_acentos(text) RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
+SET search_path = public, extensions AS $$
+  SELECT unaccent($1)
+$$;
+
 -- =====================================================================
 -- 1. TIPOS
 -- =====================================================================
@@ -146,7 +154,7 @@ CREATE TABLE obra (
     criado_por       int REFERENCES operador(id)
 );
 CREATE INDEX ix_obra_isbn ON obra (isbn);
-CREATE INDEX ix_obra_titulo_trgm ON obra USING gin (unaccent(titulo) gin_trgm_ops);
+CREATE INDEX ix_obra_titulo_trgm ON obra USING gin (public.imutavel_sem_acentos(titulo) gin_trgm_ops);
 CREATE INDEX ix_obra_cdu ON obra (cdu);
 
 CREATE TABLE obra_autor (
@@ -219,7 +227,7 @@ CREATE TABLE utilizador (
     UNIQUE (tipo, nr_interno),
     CHECK (tipo <> 'entidade' OR entidade_id IS NOT NULL)
 );
-CREATE INDEX ix_utilizador_nome_trgm ON utilizador USING gin (unaccent(nome) gin_trgm_ops);
+CREATE INDEX ix_utilizador_nome_trgm ON utilizador USING gin (public.imutavel_sem_acentos(nome) gin_trgm_ops);
 CREATE UNIQUE INDEX ux_utilizador_email ON utilizador (lower(email)) WHERE email IS NOT NULL;
 
 -- Regras de empréstimo. Parametrizáveis, não escritas no código.
