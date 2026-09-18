@@ -1,12 +1,14 @@
+import { AlertTriangle, ArrowLeftRight, Barcode, CheckCircle2, IdCard, Repeat } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { EmprestimoAtivoView, Utilizador } from '../types/db'
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Spinner } from '../components/ui'
 
 type Aba = 'emprestimo' | 'devolucao'
 
 export function Circulacao() {
   const [aba, setAba] = useState<Aba>('emprestimo')
-  const [ativos, setAtivos] = useState<EmprestimoAtivoView[]>([])
+  const [ativos, setAtivos] = useState<EmprestimoAtivoView[] | null>(null)
   const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
 
   const carregarAtivos = () => {
@@ -22,84 +24,111 @@ export function Circulacao() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-slate-900">Empréstimo / Devolução</h1>
+      <PageHeader title="Empréstimo / Devolução" subtitle="Fluxo rápido: cartão, código de barras, Enter." />
 
-      <div className="mb-4 flex gap-1">
-        <button
-          onClick={() => setAba('emprestimo')}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'emprestimo' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-300'}`}
-        >
-          Empréstimo
-        </button>
-        <button
-          onClick={() => setAba('devolucao')}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'devolucao' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-300'}`}
-        >
-          Devolução
-        </button>
-      </div>
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-2">
+          <div className="mb-4 inline-flex rounded-xl border border-slate-200/70 bg-white/60 p-1 shadow-sm">
+            <button
+              onClick={() => setAba('emprestimo')}
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                aba === 'emprestimo' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <ArrowLeftRight className="size-3.5" />
+              Empréstimo
+            </button>
+            <button
+              onClick={() => setAba('devolucao')}
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                aba === 'devolucao' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Repeat className="size-3.5" />
+              Devolução
+            </button>
+          </div>
 
-      {mensagem && (
-        <p className={`mb-4 text-sm ${mensagem.tipo === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
-          {mensagem.texto}
-        </p>
-      )}
+          {mensagem && (
+            <div
+              className={`mb-4 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm animate-slide-up ${
+                mensagem.tipo === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+              }`}
+            >
+              {mensagem.tipo === 'ok' ? (
+                <CheckCircle2 className="size-4 shrink-0" />
+              ) : (
+                <AlertTriangle className="size-4 shrink-0" />
+              )}
+              {mensagem.texto}
+            </div>
+          )}
 
-      {aba === 'emprestimo' ? (
-        <FormularioEmprestimo
-          onSucesso={(texto) => {
-            setMensagem({ tipo: 'ok', texto })
-            carregarAtivos()
-          }}
-          onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
-        />
-      ) : (
-        <FormularioDevolucao
-          onSucesso={(texto) => {
-            setMensagem({ tipo: 'ok', texto })
-            carregarAtivos()
-          }}
-          onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
-        />
-      )}
+          {aba === 'emprestimo' ? (
+            <FormularioEmprestimo
+              onSucesso={(texto) => {
+                setMensagem({ tipo: 'ok', texto })
+                carregarAtivos()
+              }}
+              onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
+            />
+          ) : (
+            <FormularioDevolucao
+              onSucesso={(texto) => {
+                setMensagem({ tipo: 'ok', texto })
+                carregarAtivos()
+              }}
+              onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
+            />
+          )}
+        </div>
 
-      <h2 className="mb-2 mt-8 text-sm font-semibold uppercase text-slate-500">Empréstimos em curso</h2>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-2">Utilizador</th>
-              <th className="px-4 py-2">Título</th>
-              <th className="px-4 py-2">Nº registo</th>
-              <th className="px-4 py-2">Prazo</th>
-              <th className="px-4 py-2">Atraso</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ativos.map((a) => (
-              <tr key={a.id} className="border-t border-slate-100">
-                <td className="px-4 py-2 font-medium text-slate-800">{a.utilizador}</td>
-                <td className="px-4 py-2">{a.titulo}</td>
-                <td className="px-4 py-2 text-slate-500">{a.nr_registo}</td>
-                <td className="px-4 py-2">{a.data_prevista_devolucao}</td>
-                <td className="px-4 py-2">
-                  {a.dias_atraso > 0 ? (
-                    <span className="text-red-600">{a.dias_atraso} dias</span>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {ativos.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  Sem empréstimos em curso.
-                </td>
-              </tr>
+        <div className="lg:col-span-3">
+          <h2 className="mb-4 text-sm font-semibold text-slate-700">Empréstimos em curso</h2>
+          <Card className="overflow-hidden">
+            {ativos === null ? (
+              <Spinner />
+            ) : ativos.length === 0 ? (
+              <EmptyState icon={<ArrowLeftRight className="size-6" />} title="Sem empréstimos em curso" />
+            ) : (
+              <div className="max-h-[520px] overflow-y-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="sticky top-0 bg-white/95 backdrop-blur">
+                    <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                      <th className="px-5 py-3">Utilizador</th>
+                      <th className="px-5 py-3">Título</th>
+                      <th className="px-5 py-3">Prazo</th>
+                      <th className="px-5 py-3">Atraso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ativos.map((a, i) => (
+                      <tr
+                        key={a.id}
+                        className="animate-fade-in border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/80"
+                        style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
+                      >
+                        <td className="px-5 py-3.5">
+                          <p className="font-medium text-slate-800">{a.utilizador}</p>
+                          <p className="text-xs text-slate-400">{a.nr_registo}</p>
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-600">{a.titulo}</td>
+                        <td className="px-5 py-3.5 text-slate-600">{a.data_prevista_devolucao}</td>
+                        <td className="px-5 py-3.5">
+                          {a.dias_atraso > 0 ? (
+                            <Badge tone="red">{a.dias_atraso}d atraso</Badge>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </tbody>
-        </table>
+          </Card>
+        </div>
       </div>
     </div>
   )
@@ -164,33 +193,21 @@ function FormularioEmprestimo({
   }
 
   return (
-    <div className="flex max-w-md flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-      <label className="text-sm text-slate-600">
-        Cartão / nº de utilizador
-        <input
-          autoFocus
-          value={cartao}
-          onChange={(e) => setCartao(e.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </label>
-      <label className="text-sm text-slate-600">
-        Código de barras do exemplar
-        <input
+    <Card className="flex flex-col gap-4 p-5">
+      <Field icon={<IdCard className="size-4" />} label="Cartão / nº de utilizador">
+        <Input autoFocus value={cartao} onChange={(e) => setCartao(e.target.value)} />
+      </Field>
+      <Field icon={<Barcode className="size-4" />} label="Código de barras do exemplar">
+        <Input
           value={codigoBarras}
           onChange={(e) => setCodigoBarras(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submeter()}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
-      </label>
-      <button
-        disabled={aSubmeter || !cartao || !codigoBarras}
-        onClick={submeter}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
+      </Field>
+      <Button loading={aSubmeter} disabled={!cartao || !codigoBarras} onClick={submeter} className="w-full">
         Registar empréstimo
-      </button>
-    </div>
+      </Button>
+    </Card>
   )
 }
 
@@ -238,24 +255,30 @@ function FormularioDevolucao({
   }
 
   return (
-    <div className="flex max-w-md flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-      <label className="text-sm text-slate-600">
-        Código de barras do exemplar
-        <input
+    <Card className="flex flex-col gap-4 p-5">
+      <Field icon={<Barcode className="size-4" />} label="Código de barras do exemplar">
+        <Input
           autoFocus
           value={codigoBarras}
           onChange={(e) => setCodigoBarras(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submeter()}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
-      </label>
-      <button
-        disabled={aSubmeter || !codigoBarras}
-        onClick={submeter}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
+      </Field>
+      <Button loading={aSubmeter} disabled={!codigoBarras} onClick={submeter} className="w-full">
         Registar devolução
-      </button>
-    </div>
+      </Button>
+    </Card>
+  )
+}
+
+function Field({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1.5 flex items-center gap-1.5 font-medium text-slate-600">
+        {icon}
+        {label}
+      </span>
+      {children}
+    </label>
   )
 }

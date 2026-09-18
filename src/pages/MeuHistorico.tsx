@@ -1,6 +1,8 @@
+import { BookOpen, History } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabaseClient'
+import { Badge, Card, EmptyState, PageHeader, Spinner } from '../components/ui'
 
 interface LinhaHistorico {
   id: number
@@ -11,11 +13,17 @@ interface LinhaHistorico {
   exemplar: { nr_registo: string; obra: { titulo: string } | null } | null
 }
 
+const ESTADO_TONE: Record<string, 'slate' | 'emerald' | 'amber' | 'red' | 'brand'> = {
+  ativo: 'brand',
+  devolvido: 'emerald',
+  atrasado: 'red',
+  perdido: 'red',
+  danificado: 'amber',
+}
+
 export function MeuHistorico() {
   const { session } = useAuth()
-  const [linhas, setLinhas] = useState<LinhaHistorico[]>([])
-  const [temFicha, setTemFicha] = useState<boolean | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [linhas, setLinhas] = useState<LinhaHistorico[] | null>(null)
 
   useEffect(() => {
     if (!session) return
@@ -26,52 +34,62 @@ export function MeuHistorico() {
       )
       .order('data_emprestimo', { ascending: false })
       .then(({ data }) => {
-        const resultado = (data as unknown as LinhaHistorico[]) ?? []
-        setLinhas(resultado)
-        setTemFicha(resultado.length > 0)
-        setLoading(false)
+        setLinhas((data as unknown as LinhaHistorico[]) ?? [])
       })
   }, [session])
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-slate-900">O meu histórico</h1>
-      <p className="mb-4 text-sm text-slate-500">{session?.user.email}</p>
+      <PageHeader title="O meu histórico" subtitle={session?.user.email} />
 
-      {loading ? (
-        <p className="text-sm text-slate-500">A carregar…</p>
-      ) : temFicha === false ? (
-        <p className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Não encontrámos nenhum registo de biblioteca associado a este email. Se achas que é um
-          engano, contacta a biblioteca.
-        </p>
+      {linhas === null ? (
+        <Card>
+          <Spinner label="A carregar histórico…" />
+        </Card>
+      ) : linhas.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<History className="size-6" />}
+            title="Sem registos"
+            description="Não encontrámos nenhum registo de biblioteca associado a este email. Se achas que é um engano, contacta a biblioteca."
+          />
+        </Card>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <Card className="overflow-hidden">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Título</th>
-                <th className="px-4 py-2">Empréstimo</th>
-                <th className="px-4 py-2">Prazo</th>
-                <th className="px-4 py-2">Devolução</th>
-                <th className="px-4 py-2">Estado</th>
+            <thead>
+              <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <th className="px-5 py-3">Título</th>
+                <th className="px-5 py-3">Empréstimo</th>
+                <th className="px-5 py-3">Prazo</th>
+                <th className="px-5 py-3">Devolução</th>
+                <th className="px-5 py-3">Estado</th>
               </tr>
             </thead>
             <tbody>
-              {linhas.map((l) => (
-                <tr key={l.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2 font-medium text-slate-800">
-                    {l.exemplar?.obra?.titulo ?? '—'}
+              {linhas.map((l, i) => (
+                <tr
+                  key={l.id}
+                  className="animate-fade-in border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/80"
+                  style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
+                >
+                  <td className="px-5 py-3.5 font-medium text-slate-800">
+                    <span className="flex items-center gap-2">
+                      <BookOpen className="size-4 text-slate-300" />
+                      {l.exemplar?.obra?.titulo ?? '—'}
+                    </span>
                   </td>
-                  <td className="px-4 py-2">{l.data_emprestimo}</td>
-                  <td className="px-4 py-2">{l.data_prevista_devolucao}</td>
-                  <td className="px-4 py-2">{l.data_devolucao ?? '—'}</td>
-                  <td className="px-4 py-2 capitalize">{l.estado}</td>
+                  <td className="px-5 py-3.5 text-slate-500">{l.data_emprestimo}</td>
+                  <td className="px-5 py-3.5 text-slate-500">{l.data_prevista_devolucao}</td>
+                  <td className="px-5 py-3.5 text-slate-500">{l.data_devolucao ?? '—'}</td>
+                  <td className="px-5 py-3.5">
+                    <Badge tone={ESTADO_TONE[l.estado] ?? 'slate'}>{l.estado}</Badge>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </div>
   )
