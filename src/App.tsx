@@ -5,6 +5,7 @@ import { Layout } from './components/Layout'
 import { Admin } from './pages/Admin'
 import { Catalogo } from './pages/Catalogo'
 import { Circulacao } from './pages/Circulacao'
+import { Espaco } from './pages/Espaco'
 import { Login } from './pages/Login'
 import { MeuHistorico } from './pages/MeuHistorico'
 import { Utilizadores } from './pages/Utilizadores'
@@ -42,6 +43,14 @@ export function App() {
           element={
             <RequireRole min="staff">
               <Utilizadores />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/espaco"
+          element={
+            <RequireRole min="staff">
+              <Espaco />
             </RequireRole>
           }
         />

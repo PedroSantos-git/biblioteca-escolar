@@ -1,4 +1,4 @@
-import { BookMarked, LayoutGrid, LogOut, Repeat, ShieldCheck, User as UserIcon, Users } from 'lucide-react'
+import { BookMarked, LayoutGrid, LogOut, MapPin, Repeat, ShieldCheck, User as UserIcon, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
@@ -54,6 +54,11 @@ export function Layout() {
             {role !== 'visitante' && (
               <NavItem to="/utilizadores" icon={<Users className="size-4" />}>
                 Utilizadores
+              </NavItem>
+            )}
+            {role !== 'visitante' && (
+              <NavItem to="/espaco" icon={<MapPin className="size-4" />}>
+                Espaço
               </NavItem>
             )}
             {role === 'visitante' && session && (

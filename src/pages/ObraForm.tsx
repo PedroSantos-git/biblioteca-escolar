@@ -90,6 +90,15 @@ export function ObraForm({ obraId, onClose, onSaved }: { obraId: number | null; 
       )
   }, [])
 
+  const carregarExemplares = (obraId: number) => {
+    supabase
+      .from('exemplar')
+      .select('id, nr_registo, codigo_barras, cota, estado_conservacao, situacao, emprestavel')
+      .eq('obra_id', obraId)
+      .order('nr_registo')
+      .then(({ data }) => setExemplares((data as ExemplarLinha[]) ?? []))
+  }
+
   useEffect(() => {
     if (!id) return
     supabase
@@ -114,16 +123,8 @@ export function ObraForm({ obraId, onClose, onSaved }: { obraId: number | null; 
         setAutores((nomes ?? []).join(', '))
       })
     carregarExemplares(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
-
-  const carregarExemplares = (obraId: number) => {
-    supabase
-      .from('exemplar')
-      .select('id, nr_registo, codigo_barras, cota, estado_conservacao, situacao, emprestavel')
-      .eq('obra_id', obraId)
-      .order('nr_registo')
-      .then(({ data }) => setExemplares((data as ExemplarLinha[]) ?? []))
-  }
 
   const sincronizarAutores = async (obraId: number) => {
     const nomes = autores

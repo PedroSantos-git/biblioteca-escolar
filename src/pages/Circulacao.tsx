@@ -1,135 +1,239 @@
-import { AlertTriangle, ArrowLeftRight, Barcode, CheckCircle2, IdCard, Repeat } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  Barcode,
+  BookX,
+  CheckCircle2,
+  GraduationCap,
+  IdCard,
+  Repeat,
+  RotateCw,
+  ShieldAlert,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import type { EmprestimoAtivoView, Utilizador } from '../types/db'
-import { Badge, Button, Card, EmptyState, Input, PageHeader, Spinner } from '../components/ui'
+import type { Utilizador } from '../types/db'
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Spinner, Tabs } from '../components/ui'
+import { ManuaisEscolares } from './ManuaisEscolares'
 
-type Aba = 'emprestimo' | 'devolucao'
+type Aba = 'emprestimo' | 'devolucao' | 'manuais'
+
+interface LinhaAtiva {
+  id: number
+  exemplar_id: number
+  nr_renovacoes: number
+  utilizador: string
+  nr_registo: string
+  titulo: string
+  data_prevista_devolucao: string
+  dias_atraso: number
+}
 
 export function Circulacao() {
   const [aba, setAba] = useState<Aba>('emprestimo')
-  const [ativos, setAtivos] = useState<EmprestimoAtivoView[] | null>(null)
+  const [ativos, setAtivos] = useState<LinhaAtiva[] | null>(null)
   const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
 
-  const carregarAtivos = () => {
-    supabase
-      .from('v_emprestimos_ativos')
-      .select('*')
+  const carregarAtivos = async () => {
+    const { data } = await supabase
+      .from('emprestimo')
+      .select(
+        'id, exemplar_id, data_prevista_devolucao, nr_renovacoes, utilizador:utilizador_id(nome), exemplar:exemplar_id(nr_registo, obra:obra_id(titulo))',
+      )
+      .is('data_devolucao', null)
       .order('data_prevista_devolucao')
       .limit(100)
-      .then(({ data }) => setAtivos((data as EmprestimoAtivoView[]) ?? []))
+    const hoje = new Date().toISOString().slice(0, 10)
+    const linhas: LinhaAtiva[] = ((data ?? []) as unknown as {
+      id: number
+      exemplar_id: number
+      data_prevista_devolucao: string
+      nr_renovacoes: number
+      utilizador: { nome: string } | null
+      exemplar: { nr_registo: string; obra: { titulo: string } | null } | null
+    }[]).map((e) => ({
+      id: e.id,
+      exemplar_id: e.exemplar_id,
+      nr_renovacoes: e.nr_renovacoes,
+      utilizador: e.utilizador?.nome ?? '—',
+      nr_registo: e.exemplar?.nr_registo ?? '—',
+      titulo: e.exemplar?.obra?.titulo ?? '—',
+      data_prevista_devolucao: e.data_prevista_devolucao,
+      dias_atraso: Math.max(
+        0,
+        Math.round((new Date(hoje).getTime() - new Date(e.data_prevista_devolucao).getTime()) / 86_400_000),
+      ),
+    }))
+    setAtivos(linhas)
   }
 
-  useEffect(carregarAtivos, [])
+  useEffect(() => {
+    carregarAtivos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const acaoEmprestimo = async (id: number, acao: 'devolver' | 'renovar' | 'perdido' | 'danificado') => {
+    if (acao === 'renovar') {
+      const linha = ativos?.find((a) => a.id === id)
+      if (!linha) return
+      const novaData = new Date(linha.data_prevista_devolucao)
+      novaData.setDate(novaData.getDate() + 15)
+      await supabase.from('renovacao').insert({
+        emprestimo_id: id,
+        data_anterior: linha.data_prevista_devolucao,
+        nova_data_prevista: novaData.toISOString().slice(0, 10),
+      })
+      await supabase
+        .from('emprestimo')
+        .update({
+          data_prevista_devolucao: novaData.toISOString().slice(0, 10),
+          nr_renovacoes: linha.nr_renovacoes + 1,
+          estado: 'ativo',
+        })
+        .eq('id', id)
+      setMensagem({ tipo: 'ok', texto: 'Empréstimo renovado por mais 15 dias.' })
+    } else if (acao === 'devolver') {
+      await supabase.from('emprestimo').update({ data_devolucao: new Date().toISOString().slice(0, 10), estado: 'devolvido' }).eq('id', id)
+      setMensagem({ tipo: 'ok', texto: 'Devolução registada.' })
+    } else {
+      const estado = acao === 'perdido' ? 'perdido' : 'danificado'
+      await supabase.from('emprestimo').update({ data_devolucao: new Date().toISOString().slice(0, 10), estado }).eq('id', id)
+      setMensagem({ tipo: 'ok', texto: `Exemplar marcado como ${estado}.` })
+    }
+    carregarAtivos()
+  }
 
   return (
     <div>
-      <PageHeader title="Empréstimo / Devolução" subtitle="Fluxo rápido: cartão, código de barras, Enter." />
+      <PageHeader title="Circulação" subtitle="Empréstimos, devoluções e manuais escolares." />
 
-      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-2">
-          <div className="mb-4 inline-flex rounded-xl border border-slate-200/70 bg-white/60 p-1 shadow-sm">
-            <button
-              onClick={() => setAba('emprestimo')}
-              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                aba === 'emprestimo' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <ArrowLeftRight className="size-3.5" />
-              Empréstimo
-            </button>
-            <button
-              onClick={() => setAba('devolucao')}
-              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                aba === 'devolucao' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Repeat className="size-3.5" />
-              Devolução
-            </button>
-          </div>
+      <Tabs
+        value={aba}
+        onChange={setAba}
+        options={[
+          { value: 'emprestimo', label: 'Empréstimo', icon: <ArrowLeftRight className="size-3.5" /> },
+          { value: 'devolucao', label: 'Devolução', icon: <Repeat className="size-3.5" /> },
+          { value: 'manuais', label: 'Manuais escolares', icon: <GraduationCap className="size-3.5" /> },
+        ]}
+      />
 
-          {mensagem && (
-            <div
-              className={`mb-4 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm animate-slide-up ${
-                mensagem.tipo === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-              }`}
-            >
-              {mensagem.tipo === 'ok' ? (
-                <CheckCircle2 className="size-4 shrink-0" />
-              ) : (
-                <AlertTriangle className="size-4 shrink-0" />
-              )}
-              {mensagem.texto}
-            </div>
-          )}
-
-          {aba === 'emprestimo' ? (
-            <FormularioEmprestimo
-              onSucesso={(texto) => {
-                setMensagem({ tipo: 'ok', texto })
-                carregarAtivos()
-              }}
-              onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
-            />
-          ) : (
-            <FormularioDevolucao
-              onSucesso={(texto) => {
-                setMensagem({ tipo: 'ok', texto })
-                carregarAtivos()
-              }}
-              onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
-            />
-          )}
-        </div>
-
-        <div className="lg:col-span-3">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">Empréstimos em curso</h2>
-          <Card className="overflow-hidden">
-            {ativos === null ? (
-              <Spinner />
-            ) : ativos.length === 0 ? (
-              <EmptyState icon={<ArrowLeftRight className="size-6" />} title="Sem empréstimos em curso" />
-            ) : (
-              <div className="max-h-[520px] overflow-y-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 bg-white/95 backdrop-blur">
-                    <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
-                      <th className="px-5 py-3">Utilizador</th>
-                      <th className="px-5 py-3">Título</th>
-                      <th className="px-5 py-3">Prazo</th>
-                      <th className="px-5 py-3">Atraso</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ativos.map((a, i) => (
-                      <tr
-                        key={a.id}
-                        className="animate-fade-in border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/80"
-                        style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
-                      >
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-slate-800">{a.utilizador}</p>
-                          <p className="text-xs text-slate-400">{a.nr_registo}</p>
-                        </td>
-                        <td className="px-5 py-3.5 text-slate-600">{a.titulo}</td>
-                        <td className="px-5 py-3.5 text-slate-600">{a.data_prevista_devolucao}</td>
-                        <td className="px-5 py-3.5">
-                          {a.dias_atraso > 0 ? (
-                            <Badge tone="red">{a.dias_atraso}d atraso</Badge>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {aba === 'manuais' ? (
+        <ManuaisEscolares />
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-2">
+            {mensagem && (
+              <div
+                className={`mb-4 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm animate-slide-up ${
+                  mensagem.tipo === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                }`}
+              >
+                {mensagem.tipo === 'ok' ? (
+                  <CheckCircle2 className="size-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="size-4 shrink-0" />
+                )}
+                {mensagem.texto}
               </div>
             )}
-          </Card>
+
+            {aba === 'emprestimo' ? (
+              <FormularioEmprestimo
+                onSucesso={(texto) => {
+                  setMensagem({ tipo: 'ok', texto })
+                  carregarAtivos()
+                }}
+                onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
+              />
+            ) : (
+              <FormularioDevolucao
+                onSucesso={(texto) => {
+                  setMensagem({ tipo: 'ok', texto })
+                  carregarAtivos()
+                }}
+                onErro={(texto) => setMensagem({ tipo: 'erro', texto })}
+              />
+            )}
+          </div>
+
+          <div className="lg:col-span-3">
+            <h2 className="mb-4 text-sm font-semibold text-slate-700">Empréstimos em curso</h2>
+            <Card className="overflow-hidden">
+              {ativos === null ? (
+                <Spinner />
+              ) : ativos.length === 0 ? (
+                <EmptyState icon={<ArrowLeftRight className="size-6" />} title="Sem empréstimos em curso" />
+              ) : (
+                <div className="max-h-[560px] overflow-y-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-white/95 backdrop-blur">
+                      <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                        <th className="px-5 py-3">Utilizador</th>
+                        <th className="px-5 py-3">Título</th>
+                        <th className="px-5 py-3">Prazo</th>
+                        <th className="px-5 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ativos.map((a, i) => (
+                        <tr
+                          key={a.id}
+                          className="animate-fade-in border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/80"
+                          style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
+                        >
+                          <td className="px-5 py-3.5">
+                            <p className="font-medium text-slate-800">{a.utilizador}</p>
+                            <p className="text-xs text-slate-400">{a.nr_registo}</p>
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-600">{a.titulo}</td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              {a.data_prevista_devolucao}
+                              {a.dias_atraso > 0 && <Badge tone="red">{a.dias_atraso}d</Badge>}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                title="Renovar"
+                                onClick={() => acaoEmprestimo(a.id, 'renovar')}
+                                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-brand-50 hover:text-brand-600"
+                              >
+                                <RotateCw className="size-3.5" />
+                              </button>
+                              <button
+                                title="Devolver"
+                                onClick={() => acaoEmprestimo(a.id, 'devolver')}
+                                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"
+                              >
+                                <CheckCircle2 className="size-3.5" />
+                              </button>
+                              <button
+                                title="Marcar danificado"
+                                onClick={() => acaoEmprestimo(a.id, 'danificado')}
+                                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-amber-50 hover:text-amber-600"
+                              >
+                                <ShieldAlert className="size-3.5" />
+                              </button>
+                              <button
+                                title="Marcar perdido"
+                                onClick={() => acaoEmprestimo(a.id, 'perdido')}
+                                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500"
+                              >
+                                <BookX className="size-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -194,16 +298,16 @@ function FormularioEmprestimo({
 
   return (
     <Card className="flex flex-col gap-4 p-5">
-      <Field icon={<IdCard className="size-4" />} label="Cartão / nº de utilizador">
+      <FieldIcon icon={<IdCard className="size-4" />} label="Cartão / nº de utilizador">
         <Input autoFocus value={cartao} onChange={(e) => setCartao(e.target.value)} />
-      </Field>
-      <Field icon={<Barcode className="size-4" />} label="Código de barras do exemplar">
+      </FieldIcon>
+      <FieldIcon icon={<Barcode className="size-4" />} label="Código de barras do exemplar">
         <Input
           value={codigoBarras}
           onChange={(e) => setCodigoBarras(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submeter()}
         />
-      </Field>
+      </FieldIcon>
       <Button loading={aSubmeter} disabled={!cartao || !codigoBarras} onClick={submeter} className="w-full">
         Registar empréstimo
       </Button>
@@ -256,14 +360,14 @@ function FormularioDevolucao({
 
   return (
     <Card className="flex flex-col gap-4 p-5">
-      <Field icon={<Barcode className="size-4" />} label="Código de barras do exemplar">
+      <FieldIcon icon={<Barcode className="size-4" />} label="Código de barras do exemplar">
         <Input
           autoFocus
           value={codigoBarras}
           onChange={(e) => setCodigoBarras(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submeter()}
         />
-      </Field>
+      </FieldIcon>
       <Button loading={aSubmeter} disabled={!codigoBarras} onClick={submeter} className="w-full">
         Registar devolução
       </Button>
@@ -271,7 +375,7 @@ function FormularioDevolucao({
   )
 }
 
-function Field({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+function FieldIcon({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
     <label className="block text-sm">
       <span className="mb-1.5 flex items-center gap-1.5 font-medium text-slate-600">

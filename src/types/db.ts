@@ -3,6 +3,8 @@ export type TipoUtilizador = 'aluno' | 'docente' | 'nao_docente' | 'externo' | '
 export type SituacaoExemplar = 'disponivel' | 'emprestado' | 'reservado' | 'reparacao' | 'extraviado' | 'abatido'
 export type EstadoFisico = 'bom' | 'razoavel' | 'danificado' | 'inutilizado'
 export type TipoDocumento = 'monografia' | 'manual_escolar' | 'periodico' | 'audiovisual' | 'jogo' | 'outro'
+export type EscalaoAse = 'sem_escalao' | 'A' | 'B' | 'C'
+export type EstadoEquipamento = 'operacional' | 'avaria' | 'manutencao' | 'abatido'
 
 export interface Operador {
   id: number
